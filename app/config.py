@@ -14,6 +14,11 @@ DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
 
+# Security
+# Chatbot: hem main-server hem de frontend'e açık (frontend doğrudan chatbot'a çağrı yapabilir)
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8080,http://localhost:3000").split(",")]
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
 SYSTEM_PROMPT = """Sen e-Arzuhal uygulamasının yardımcı asistanısın.
 e-Arzuhal, kullanıcıların doğal dilde yazdıkları metinden otomatik olarak sözleşme ve dilekçe oluşturmasını sağlayan yapay zeka destekli bir hukuk platformudur.
 
