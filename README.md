@@ -1,20 +1,20 @@
 # e-Arzuhal – Chatbot Server
 
-Kullanici rehberi ve SSS chatbot servisi — FastAPI ile yazilmis, kural tabanli + isteğe bagly LLM destekli.
+Kullanıcı rehberi ve SSS chatbot servisi — FastAPI, kural tabanlı mod.
 
 ---
 
-## Genel Bakis
+## Genel Bakış
 
-Bu servis kullanicilarin e-Arzuhal uygulamasi hakkinda sorularini yanitlar:
+Bu servis kullanıcıların e-Arzuhal uygulaması hakkındaki sorularını yanıtlar:
 
-- Sozlesme olusturma adimlari
-- Platform ozellikleri
-- Sikca sorulan sorular (SSS)
-- Yonlendirme onerleri
+- Sözleşme oluşturma adımları
+- Platform özellikleri
+- Sıkça sorulan sorular (SSS)
+- Yönlendirme önerileri
 
-Chatbot, `GEMINI_API_KEY` set edilmemisse **kural tabanli** (pattern matching) modda calisir;
-set edilirse **Google Gemini** LLM'i kullanir. Surecte yerel Qwen 2 entegrasyonu planlanmaktadir.
+Chatbot varsayılan olarak **kural tabanlı** (pattern matching) modda çalışır.
+Google Gemini entegrasyonu kaldırılmıştır; ilerleyen dönemde yerel Qwen 2 entegrasyonu planlanmaktadır.
 
 ---
 
@@ -24,7 +24,6 @@ set edilirse **Google Gemini** LLM'i kullanir. Surecte yerel Qwen 2 entegrasyonu
 |--------|-----------|
 | Language | Python 3.11+ |
 | Framework | FastAPI 0.115 |
-| LLM (opsiyonel) | Google Gemini (gemini-2.0-flash) |
 | Validation | Pydantic v2 |
 | Port | 8003 |
 
@@ -35,7 +34,8 @@ set edilirse **Google Gemini** LLM'i kullanir. Surecte yerel Qwen 2 entegrasyonu
 ```bash
 cd chatbot-server
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+venv\Scripts\activate   # Windows
+# source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8003
 ```
@@ -44,128 +44,78 @@ uvicorn app.main:app --reload --port 8003
 
 ## API Endpoints
 
-### `GET /health`
+### GET /health
 
 ```json
-{
-  "status": "healthy",
-  "version": "0.1.0",
-  "llm_enabled": false
-}
+{ "status": "healthy", "version": "0.1.0" }
 ```
 
-`llm_enabled: true` ise `GEMINI_API_KEY` aktif demektir.
+### POST /api/chat
 
-### `POST /api/chat`
-
-Kullanicidan mesaj alip chatbot yaniti doner.
-
-**Request:**
+**İstek:**
 ```json
 {
-  "message": "Sozlesme nasil olusturabilirim?",
+  "message": "Sözleşme nasıl oluşturabilirim?",
   "history": [
     { "role": "user", "content": "Merhaba" },
-    { "role": "assistant", "content": "Merhaba! Size nasil yardimci olabilirim?" }
+    { "role": "assistant", "content": "Merhaba! Size nasıl yardımcı olabilirim?" }
   ]
 }
 ```
 
-**Response:**
+**Yanıt:**
 ```json
 {
-  "response": "Sozlesme olusturmak icin 'Yeni Sozlesme' butonuna tiklayin ve ihtiyacinizi dogal dilde aciklayin. Sistem otomatik olarak sozlesme turunu tespit eder.",
+  "response": "Sözleşme oluşturmak için 'Yeni Sözleşme' butonuna tıklayın ve ihtiyacınızı doğal dilde açıklayın.",
   "suggested_questions": [
-    "Hangi sozlesme turleri destekleniyor?",
-    "PDF nasil indiririm?"
+    "Hangi sözleşme türleri destekleniyor?",
+    "PDF nasıl indiririm?"
   ]
 }
 ```
 
-### `GET /`
-
-Servis bilgisi.
-
 ---
 
-## Ortam Degiskenleri
+## Ortam Değişkenleri
 
-`.env.example` dosyasindan kopyalayin:
-
-```bash
-cp .env.example .env
-```
-
-| Degisken | Varsayilan | Aciklama |
+| Değişken | Varsayılan | Açıklama |
 |----------|-----------|----------|
 | `HOST` | `0.0.0.0` | Dinleme adresi |
-| `PORT` | `8003` | Servis portu |
-| `DEBUG` | `true` | Swagger UI + detayli log |
-| `GEMINI_API_KEY` | _(bos)_ | Set edilmezse kural tabanli mod |
-| `LLM_MODEL` | `gemini-2.0-flash` | Kullanilacak Gemini modeli |
+| `PORT` | `8003` | Port |
+| `DEBUG` | `true` | Swagger UI + detaylı log |
 | `ALLOWED_ORIGINS` | `http://localhost:8080,http://localhost:3000` | CORS whitelist |
-| `INTERNAL_API_KEY` | _(bos)_ | Servisler arasi API anahtari |
+| `INTERNAL_API_KEY` | _(boş)_ | Prod'da main-server ile aynı olmalı |
 
 ---
 
-## Guvenlik
+## Güvenlik
 
-### CORS
-
-Chatbot servisi hem `main-server` hem de frontend tarafindan cagrilabilir (web + mobil).
-Bu nedenle `ALLOWED_ORIGINS` varsayilan olarak iki origin icerir:
-
-```
-ALLOWED_ORIGINS=http://main-server:8080,http://frontend-web:3000
-```
-
-### Internal API Key Middleware
-
-- `INTERNAL_API_KEY` **set edilmemisse** (dev): kontrol atlanir.
-- **Set edilmisse** (prod): `X-Internal-API-Key` header'i eslesmeyen istekler `401` alir.
-- `/health` ve `/` endpoint'leri her zaman serbest.
-
-`main-server`'in `INTERNAL_API_KEY` degeriyle ayni olmalidir:
-
-```bash
-openssl rand -hex 32
-```
-
-### Swagger UI
-
-- `DEBUG=true`: `/docs` ve `/redoc` erisilebilir.
-- `DEBUG=false` (prod): Swagger tamamen devre disi.
+- `INTERNAL_API_KEY` set edilmemişse (dev) kontrol atlanır; set edilmişse `X-Internal-API-Key` header zorunlu.
+- `/health` ve `/` her zaman serbesttir.
+- `DEBUG=false` (prod): Swagger devre dışı.
 
 ---
 
-## Proje Yapisi
+## Proje Yapısı
 
 ```
 chatbot-server/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py              # FastAPI app + CORS + middleware
-│   ├── config.py            # Konfigürasyon + sistem promptu
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── schemas.py       # ChatRequest, ChatResponse, HealthResponse
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   └── chat.py          # POST /api/chat
-│   └── services/
-│       ├── __init__.py
-│       └── chatbot.py       # Kural tabanli + LLM yanit uretici
+│   ├── main.py
+│   ├── config.py
+│   ├── models/schemas.py
+│   ├── routers/chat.py
+│   └── services/chatbot.py    # Kural tabanlı yanıt üretici
 ├── requirements.txt
-├── .env.example
-└── README.md
+└── .env.example
 ```
 
 ---
 
 ## Mimari Not
 
-Roadmap geregi chatbot servisi **dogrudan** GraphRAG veya Statistics servisine baglanmamali.
-Gerekmesi halinde sorgu main-server uzerinden yapilmalidir:
+Chatbot servisi **doğrudan** GraphRAG veya Statistics servisine bağlanmamalıdır.
+Gerekirse sorgu main-server üzerinden yapılmalıdır:
 
 ```
 Chatbot → main-server → (GraphRAG / Statistics)
@@ -176,5 +126,5 @@ Chatbot → main-server → (GraphRAG / Statistics)
 ## Ekip
 
 - **Burak DERE** — AI & Data Engineer
-- **Deniz Eren ARICI** — Frontend & UI Engineer
-- **Enes Burak ATAY** — Lead & Mobile + Coordinator
+- **Deniz Eren ARICI** — Frontend & UI
+- **Enes Burak ATAY** — Lead & Mobile
