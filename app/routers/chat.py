@@ -13,10 +13,23 @@ async def chat(request: ChatRequest):
     """
     Kullanicidan mesaj alip chatbot yaniti doner.
     POST /api/chat
-    { "message": "...", "history": [...] }
+
+    Basit mod:    { "message": "...", "history": [...] }
+    Enriched mod: { "message": "...", "history": [...], "intent": "...",
+                    "sanitized_message": "...", "contract_context": "...",
+                    "graphrag_context": "..." }
     """
     try:
-        response, suggested_questions = get_chat_response(request.message, request.history)
+        # Enriched mesaj varsa onu kullan, yoksa orijinal mesaj
+        effective_message = request.sanitized_message or request.message
+
+        response, suggested_questions = get_chat_response(
+            message=effective_message,
+            history=request.history,
+            intent=request.intent,
+            contract_context=request.contract_context,
+            graphrag_context=request.graphrag_context,
+        )
         return ChatResponse(response=response, suggested_questions=suggested_questions)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
