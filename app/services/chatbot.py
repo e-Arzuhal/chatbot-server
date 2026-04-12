@@ -1,6 +1,6 @@
 """
 e-Arzuhal Chatbot Service
-Kural tabanli SSS + opsiyonel Gemini LLM entegrasyonu
+Context-aware Gemini LLM entegrasyonu + FAQ fallback
 """
 from app.config import GEMINI_API_KEY, LLM_MODEL, SYSTEM_PROMPT
 
@@ -70,6 +70,30 @@ DEFAULT_SUGGESTIONS = [
     "Hangi sözleşme tipleri destekleniyor?",
 ]
 
+# Niyete göre önerilen sorular
+INTENT_SUGGESTIONS = {
+    "CONTRACT_CLAUSE_QUESTION": [
+        "Bu maddeler zorunlu mu?",
+        "Başka hangi maddeler eklenebilir?",
+        "Sözleşmedeki riskler neler?",
+    ],
+    "MISSING_CLAUSE_QUESTION": [
+        "Bu eksik maddeler ne işe yarar?",
+        "Hangileri zorunlu, hangileri opsiyonel?",
+        "Eksik maddeleri nasıl eklerim?",
+    ],
+    "LEGAL_QUESTION": [
+        "İlgili kanun maddeleri neler?",
+        "Benzer Yargıtay kararları var mı?",
+        "Hukuki riskler neler?",
+    ],
+    "LAW_REFERENCE": [
+        "Bu madde ne anlama geliyor?",
+        "Uygulamada nasıl yorumlanıyor?",
+        "Ceza hükmü var mı?",
+    ],
+}
+
 
 def _find_faq_match(message: str):
     msg_lower = message.lower()
@@ -79,14 +103,38 @@ def _find_faq_match(message: str):
     return None, None
 
 
-def _call_llm(message: str, history: list) -> str:
+def _build_enriched_prompt(intent: str, contract_context: str = None,
+                           graphrag_context: str = None) -> str:
+    """Intent ve bağlama göre Gemini system prompt oluşturur."""
+    parts = [SYSTEM_PROMPT, "\n\n--- BAĞLAM BİLGİSİ ---\n"]
+
+    if intent == "CONTRACT_CLAUSE_QUESTION":
+        parts.append("Kullanıcı, oluşturduğu sözleşmenin maddeleri hakkında soru soruyor.\n")
+    elif intent == "MISSING_CLAUSE_QUESTION":
+        parts.append("Kullanıcı, sözleşmesindeki eksik maddeler hakkında bilgi istiyor.\n")
+    elif intent == "LEGAL_QUESTION":
+        parts.append("Kullanıcı genel bir hukuki soru soruyor. İlgili kanun maddelerini referans vererek yanıtla.\n")
+    elif intent == "LAW_REFERENCE":
+        parts.append("Kullanıcı belirli kanun maddeleri (TBK/HMK vb.) hakkında bilgi istiyor.\n")
+
+    if contract_context:
+        parts.append(f"\nKullanıcının aktif sözleşmesi:\n{contract_context}\n")
+
+    if graphrag_context:
+        parts.append(f"\nBilgi Grafiği (GraphRAG) analiz sonucu:\n{graphrag_context}\n")
+
+    parts.append("\nYukarıdaki bağlam bilgisini kullanarak kullanıcının sorusuna Türkçe, kısa ve net yanıt ver.")
+    return "".join(parts)
+
+
+def _call_llm(message: str, history: list, system_override: str = None) -> str:
     """Gemini API'ye istek at"""
     import google.generativeai as genai
 
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(
         model_name=LLM_MODEL,
-        system_instruction=SYSTEM_PROMPT,
+        system_instruction=system_override or SYSTEM_PROMPT,
     )
 
     # Gemini history formatı: [{role, parts}]
@@ -100,23 +148,34 @@ def _call_llm(message: str, history: list) -> str:
     return response.text
 
 
-def get_chat_response(message: str, history: list) -> tuple[str, list]:
+def get_chat_response(message: str, history: list, intent: str = None,
+                      contract_context: str = None,
+                      graphrag_context: str = None) -> tuple[str, list]:
     """
     Ana chatbot logic:
-    1. Once FAQ eslesme dene
-    2. LLM aktifse LLM'e gonder
-    3. Fallback: varsayilan yanit
+    1. GENERAL_HELP veya enrichment yoksa → FAQ eşleşme dene
+    2. Enrichment varsa → intent'e göre prompt oluştur ve LLM'e gönder
+    3. Fallback: varsayılan yanıt
     """
-    # 1. FAQ
-    faq_response, faq_suggestions = _find_faq_match(message)
-    if faq_response:
-        return faq_response, faq_suggestions
+    # 1. FAQ kontrolü (GENERAL_HELP veya enrichment yoksa)
+    if not intent or intent == "GENERAL_HELP":
+        faq_response, faq_suggestions = _find_faq_match(message)
+        if faq_response:
+            return faq_response, faq_suggestions
 
-    # 2. LLM
+    # 2. LLM ile context-aware yanıt
     if GEMINI_API_KEY:
         try:
-            llm_response = _call_llm(message, history)
-            return llm_response, DEFAULT_SUGGESTIONS
+            # Enrichment varsa özel prompt oluştur
+            system_override = None
+            if intent and intent != "GENERAL_HELP":
+                system_override = _build_enriched_prompt(
+                    intent, contract_context, graphrag_context
+                )
+
+            llm_response = _call_llm(message, history, system_override=system_override)
+            suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
+            return llm_response, suggestions
         except Exception as e:
             print(f"LLM hatasi: {e}")
 
