@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import HOST, PORT, DEBUG, GEMINI_API_KEY, ALLOWED_ORIGINS, INTERNAL_API_KEY
+from app.config import HOST, PORT, DEBUG, LLM_ENABLED, ALLOWED_ORIGINS, INTERNAL_API_KEY
 from app.routers import chat
 from app.models.schemas import HealthResponse
 
@@ -30,10 +30,12 @@ app.add_middleware(
 
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
-    """Internal API key kontrolü. INTERNAL_API_KEY set edilmemişse (dev) pas geçer."""
+    """Chatbot endpointleri yalnızca main-server üzerinden erişilebilir."""
     if request.url.path in ("/health", "/"):
         return await call_next(request)
-    if INTERNAL_API_KEY and request.headers.get("X-Internal-API-Key") != INTERNAL_API_KEY:
+    if not INTERNAL_API_KEY:
+        return JSONResponse(status_code=503, content={"detail": "Server misconfigured: INTERNAL_API_KEY is required"})
+    if request.headers.get("X-Internal-API-Key") != INTERNAL_API_KEY:
         return JSONResponse(status_code=401, content={"detail": "Geçersiz veya eksik API anahtarı"})
     return await call_next(request)
 
@@ -54,7 +56,7 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         version="0.1.0",
-        llm_enabled=bool(GEMINI_API_KEY),
+        llm_enabled=LLM_ENABLED,
     )
 
 
