@@ -17,14 +17,14 @@ class ChatRequest(BaseModel):
     Chatbot isteği. Hem basit mod (message+history) hem de
     enriched mod (main-server orkestrasyon sonrası) desteklenir.
     """
-    message: str
-    history: Optional[List[Message]] = []
+    message: str = Field(..., min_length=1, max_length=2000)
+    history: Optional[List[Message]] = Field(default=[], max_length=20)
 
     # Enrichment alanları — main-server'dan gelir (opsiyonel, backward compatible)
-    sanitized_message: Optional[str] = Field(default=None, alias="sanitizedMessage")
-    intent: Optional[str] = None
-    contract_context: Optional[str] = Field(default=None, alias="contractContext")
-    graphrag_context: Optional[str] = Field(default=None, alias="graphRagContext")
+    sanitized_message: Optional[str] = Field(default=None, alias="sanitizedMessage", max_length=2000)
+    intent: Optional[str] = Field(default=None, max_length=50)
+    contract_context: Optional[str] = Field(default=None, alias="contractContext", max_length=5000)
+    graphrag_context: Optional[str] = Field(default=None, alias="graphRagContext", max_length=5000)
 
     # Hem snake_case hem camelCase payload kabul et
     model_config = ConfigDict(populate_by_name=True)
