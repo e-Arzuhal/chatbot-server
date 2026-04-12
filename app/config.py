@@ -10,9 +10,10 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", 8003))
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 
-# LLM (opsiyonel - set edilmezse kural tabanli sistem kullanilir)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
+# LLM — lokal Ollama (Qwen2)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2:1.5b")
+LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
 
 # Security
 # Chatbot: hem main-server hem de frontend'e açık (frontend doğrudan chatbot'a çağrı yapabilir)
