@@ -5,8 +5,11 @@ FastAPI uygulama giris noktasi
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import HOST, PORT, DEBUG, LLM_ENABLED, ALLOWED_ORIGINS, INTERNAL_API_KEY
+from app.limiter import limiter
 from app.routers import chat
 from app.models.schemas import HealthResponse
 
@@ -17,6 +20,8 @@ app = FastAPI(
     docs_url="/docs" if DEBUG else None,
     redoc_url="/redoc" if DEBUG else None,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — izin verilen origin'ler env'den okunur
 app.add_middleware(

@@ -1,15 +1,17 @@
 """
 e-Arzuhal Chatbot Server - API Routes
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.models.schemas import ChatRequest, ChatResponse
 from app.services.chatbot import get_chat_response
+from app.limiter import limiter
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 
 @router.post("", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+@limiter.limit("5/minute;20/day")
+async def chat(request: Request, body: ChatRequest):
     """
     Kullanicidan mesaj alip chatbot yaniti doner.
     POST /api/chat
@@ -20,15 +22,14 @@ async def chat(request: ChatRequest):
                     "graphrag_context": "..." }
     """
     try:
-        # Enriched mesaj varsa onu kullan, yoksa orijinal mesaj
-        effective_message = request.sanitized_message or request.message
+        effective_message = body.sanitized_message or body.message
 
         response, suggested_questions = await get_chat_response(
             message=effective_message,
-            history=request.history,
-            intent=request.intent,
-            contract_context=request.contract_context,
-            graphrag_context=request.graphrag_context,
+            history=body.history,
+            intent=body.intent,
+            contract_context=body.contract_context,
+            graphrag_context=body.graphrag_context,
         )
         return ChatResponse(response=response, suggested_questions=suggested_questions)
     except Exception as e:
