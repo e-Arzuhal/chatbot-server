@@ -23,7 +23,7 @@ async def chat(request: ChatRequest):
         # Enriched mesaj varsa onu kullan, yoksa orijinal mesaj
         effective_message = request.sanitized_message or request.message
 
-        response, suggested_questions = get_chat_response(
+        response, suggested_questions = await get_chat_response(
             message=effective_message,
             history=request.history,
             intent=request.intent,
