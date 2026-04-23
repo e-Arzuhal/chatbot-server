@@ -31,6 +31,9 @@ app.add_middleware(
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
     """Chatbot endpointleri yalnızca main-server üzerinden erişilebilir."""
+    # Gelistirme ortaminda /docs, /redoc ve /openapi.json yollarina erisime izin ver
+    if DEBUG and request.url.path in ("/docs", "/redoc", "/openapi.json"):
+        return await call_next(request)
     if request.url.path in ("/health", "/"):
         return await call_next(request)
     if not INTERNAL_API_KEY:

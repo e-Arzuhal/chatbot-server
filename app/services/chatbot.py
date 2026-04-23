@@ -129,21 +129,24 @@ def _build_enriched_prompt(intent: str, contract_context: str = None,
 
 def _call_llm(message: str, history: list, system_override: str = None) -> str:
     """Gemini API'ye istek at"""
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        model_name=LLM_MODEL,
-        system_instruction=system_override or SYSTEM_PROMPT,
-    )
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     # Gemini history formatı: [{role, parts}]
     chat_history = []
     for h in history[-6:]:  # Son 6 mesaj (3 tur)
         role = "user" if h.role == "user" else "model"
-        chat_history.append({"role": role, "parts": [h.content]})
+        chat_history.append(types.Content(role=role, parts=[types.Part(text=h.content)]))
 
-    chat = model.start_chat(history=chat_history)
+    chat = client.chats.create(
+        model=LLM_MODEL,
+        config=types.GenerateContentConfig(
+            system_instruction=system_override or SYSTEM_PROMPT,
+        ),
+        history=chat_history,
+    )
     response = chat.send_message(message)
     return response.text
 
