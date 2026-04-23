@@ -99,10 +99,61 @@ INTENT_SUGGESTIONS = {
 }
 
 
+_TR_SUFFIXES = [
+    "lerim", "lerin", "lerini", "lerinde", "lerinden", "lerine", "leriyle",
+    "larım", "ların", "larını", "larında", "larından", "larına", "larıyla",
+    "imin", "imin", "imde", "imden", "ime", "imle",
+    "inin", "inde", "inden", "ine", "inle",
+    "unun", "unda", "undan", "una", "unla",
+    "ünün", "ünde", "ünden", "üne", "ünle",
+    "ler", "lar", "ım", "im", "um", "üm",
+    "ın", "in", "un", "ün",
+    "da", "de", "dan", "den",
+    "ya", "ye", "yı", "yi", "yu", "yü",
+    "nın", "nin", "nun", "nün",
+    "nda", "nde", "ndan", "nden",
+    "na", "ne", "mı", "mi", "mu", "mü",
+    "la", "le", "ca", "ce",
+]
+
+_TR_TO_ASCII = str.maketrans("çğışöüÇĞİŞÖÜ", "cgisoucgiSOU".lower())
+
+
+def _ascii(text: str) -> str:
+    """Türkçe karakterleri ASCII karşılıklarına çevirir."""
+    return text.translate(_TR_TO_ASCII)
+
+
+_CONSONANT_HARDEN = str.maketrans("bdgc", "ptkç")
+
+
+def _strip_suffix(word: str) -> str:
+    """Kelimeden yaygın Türkçe ekleri çıkarır, ünsüz yumuşamasını geri alır."""
+    for suffix in _TR_SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            stem = word[: -len(suffix)]
+            # hesab→hesap, kayd→kayıt gibi yumuşamaları geri al
+            return stem[:-1] + stem[-1].translate(_CONSONANT_HARDEN) if stem else stem
+    return word
+
+
+def _expand_message(message: str) -> str:
+    """
+    Eşleşme yüzeyini genişletir:
+    orijinal + ASCII karşılığı + ek çıkarılmış ASCII karşılığı
+    """
+    lower = message.lower()
+    ascii_msg = _ascii(lower)
+    words = ascii_msg.split()
+    once = [_strip_suffix(w) for w in words]
+    twice = [_strip_suffix(w) for w in once]
+    return lower + " " + ascii_msg + " " + " ".join(once) + " " + " ".join(twice)
+
+
 def _find_faq_match(message: str):
-    msg_lower = message.lower()
+    expanded = _expand_message(message)
     for keywords, response, suggestions in FAQ:
-        if any(kw in msg_lower for kw in keywords):
+        if any(kw in expanded for kw in keywords):
             return response, suggestions
     return None, None
 
