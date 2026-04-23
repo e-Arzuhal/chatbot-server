@@ -39,3 +39,11 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     llm_enabled: bool
+    llm_status: str = "disabled"  # "ok" | "error" | "disabled"
+
+
+class FeedbackRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    response: str = Field(..., min_length=1, max_length=5000)
+    rating: int = Field(..., ge=1, le=5)
+    intent: Optional[str] = Field(default=None, max_length=50)
