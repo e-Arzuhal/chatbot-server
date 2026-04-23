@@ -2,7 +2,11 @@
 e-Arzuhal Chatbot Service
 Context-aware Gemini LLM entegrasyonu + FAQ fallback
 """
+import logging
+
 from app.config import GEMINI_API_KEY, LLM_MODEL, SYSTEM_PROMPT
+
+logger = logging.getLogger("chatbot")
 
 # Kural tabanli SSS: (anahtar_kelimeler, yanit, onerilen_sorular)
 FAQ = [
@@ -60,6 +64,10 @@ FAQ = [
     ),
 ]
 
+LEGAL_DISCLAIMER = (
+    "\n\n---\n*Bu yanıt yalnızca bilgilendirme amaçlıdır ve hukuki tavsiye niteliği taşımaz.*"
+)
+
 DEFAULT_RESPONSE = (
     "Bu konuda yardımcı olabileceğim bir bilgiye sahip değilim. "
     "Sözleşme oluşturma, PDF indirme veya onay süreci hakkında soru sorabilirsiniz."
@@ -95,10 +103,61 @@ INTENT_SUGGESTIONS = {
 }
 
 
+_TR_SUFFIXES = [
+    "lerim", "lerin", "lerini", "lerinde", "lerinden", "lerine", "leriyle",
+    "larım", "ların", "larını", "larında", "larından", "larına", "larıyla",
+    "imin", "imin", "imde", "imden", "ime", "imle",
+    "inin", "inde", "inden", "ine", "inle",
+    "unun", "unda", "undan", "una", "unla",
+    "ünün", "ünde", "ünden", "üne", "ünle",
+    "ler", "lar", "ım", "im", "um", "üm",
+    "ın", "in", "un", "ün",
+    "da", "de", "dan", "den",
+    "ya", "ye", "yı", "yi", "yu", "yü",
+    "nın", "nin", "nun", "nün",
+    "nda", "nde", "ndan", "nden",
+    "na", "ne", "mı", "mi", "mu", "mü",
+    "la", "le", "ca", "ce",
+]
+
+_TR_TO_ASCII = str.maketrans("çğışöüÇĞİŞÖÜ", "cgisoucgiSOU".lower())
+
+
+def _ascii(text: str) -> str:
+    """Türkçe karakterleri ASCII karşılıklarına çevirir."""
+    return text.translate(_TR_TO_ASCII)
+
+
+_CONSONANT_HARDEN = str.maketrans("bdgc", "ptkç")
+
+
+def _strip_suffix(word: str) -> str:
+    """Kelimeden yaygın Türkçe ekleri çıkarır, ünsüz yumuşamasını geri alır."""
+    for suffix in _TR_SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            stem = word[: -len(suffix)]
+            # hesab→hesap, kayd→kayıt gibi yumuşamaları geri al
+            return stem[:-1] + stem[-1].translate(_CONSONANT_HARDEN) if stem else stem
+    return word
+
+
+def _expand_message(message: str) -> str:
+    """
+    Eşleşme yüzeyini genişletir:
+    orijinal + ASCII karşılığı + ek çıkarılmış ASCII karşılığı
+    """
+    lower = message.lower()
+    ascii_msg = _ascii(lower)
+    words = ascii_msg.split()
+    once = [_strip_suffix(w) for w in words]
+    twice = [_strip_suffix(w) for w in once]
+    return lower + " " + ascii_msg + " " + " ".join(once) + " " + " ".join(twice)
+
+
 def _find_faq_match(message: str):
-    msg_lower = message.lower()
+    expanded = _expand_message(message)
     for keywords, response, suggestions in FAQ:
-        if any(kw in msg_lower for kw in keywords):
+        if any(kw in expanded for kw in keywords):
             return response, suggestions
     return None, None
 
@@ -129,34 +188,63 @@ def _build_enriched_prompt(intent: str, contract_context: str = None,
 
 def _call_llm(message: str, history: list, system_override: str = None) -> str:
     """Gemini API'ye istek at"""
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        model_name=LLM_MODEL,
-        system_instruction=system_override or SYSTEM_PROMPT,
-    )
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     # Gemini history formatı: [{role, parts}]
     chat_history = []
     for h in history[-6:]:  # Son 6 mesaj (3 tur)
         role = "user" if h.role == "user" else "model"
-        chat_history.append({"role": role, "parts": [h.content]})
+        chat_history.append(types.Content(role=role, parts=[types.Part(text=h.content)]))
 
-    chat = model.start_chat(history=chat_history)
+    chat = client.chats.create(
+        model=LLM_MODEL,
+        config=types.GenerateContentConfig(
+            system_instruction=system_override or SYSTEM_PROMPT,
+        ),
+        history=chat_history,
+    )
     response = chat.send_message(message)
     return response.text
 
 
-def get_chat_response(message: str, history: list, intent: str = None,
-                      contract_context: str = None,
-                      graphrag_context: str = None) -> tuple[str, list]:
+def _iter_llm_stream(message: str, history: list, system_override: str = None):
+    """Gemini streaming sync generator — her chunk'ı yield eder."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    contents = []
+    for h in history[-6:]:
+        role = "user" if h.role == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part(text=h.content)]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=message)]))
+
+    for chunk in client.models.generate_content_stream(
+        model=LLM_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_override or SYSTEM_PROMPT,
+        ),
+    ):
+        if chunk.text:
+            yield chunk.text
+
+
+async def get_chat_response(message: str, history: list, intent: str = None,
+                            contract_context: str = None,
+                            graphrag_context: str = None) -> tuple[str, list]:
     """
     Ana chatbot logic:
     1. GENERAL_HELP veya enrichment yoksa → FAQ eşleşme dene
     2. Enrichment varsa → intent'e göre prompt oluştur ve LLM'e gönder
     3. Fallback: varsayılan yanıt
     """
+    import asyncio
+
     # 1. FAQ kontrolü (GENERAL_HELP veya enrichment yoksa)
     if not intent or intent == "GENERAL_HELP":
         faq_response, faq_suggestions = _find_faq_match(message)
@@ -166,18 +254,31 @@ def get_chat_response(message: str, history: list, intent: str = None,
     # 2. LLM ile context-aware yanıt
     if GEMINI_API_KEY:
         try:
-            # Enrichment varsa özel prompt oluştur
+            from app.sanitizer import redact
+
+            clean_msg, found_msg = redact(message)
+            clean_contract, found_ctx = redact(contract_context or "")
+            clean_graphrag, found_rag = redact(graphrag_context or "")
+            all_found = found_msg + found_ctx + found_rag
+            if all_found:
+                logger.warning("PII redacted before LLM: %s", all_found)
+
             system_override = None
             if intent and intent != "GENERAL_HELP":
                 system_override = _build_enriched_prompt(
-                    intent, contract_context, graphrag_context
+                    intent,
+                    clean_contract or None,
+                    clean_graphrag or None,
                 )
 
-            llm_response = _call_llm(message, history, system_override=system_override)
+            # Sync Gemini çağrısını thread pool'a taşı — event loop bloklanmaz
+            llm_response = await asyncio.to_thread(
+                _call_llm, clean_msg, history, system_override
+            )
             suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
-            return llm_response, suggestions
+            return llm_response + LEGAL_DISCLAIMER, suggestions
         except Exception as e:
-            print(f"LLM hatasi: {e}")
+            logger.error("LLM hatası: %s", e, exc_info=True)
 
     # 3. Fallback
     return DEFAULT_RESPONSE, DEFAULT_SUGGESTIONS
