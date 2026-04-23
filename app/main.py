@@ -13,16 +13,15 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import HOST, PORT, DEBUG, LLM_ENABLED, ALLOWED_ORIGINS, INTERNAL_API_KEY, GEMINI_API_KEY
+from app.logging_config import setup_logging
 from app.limiter import limiter
 from app.routers import chat
 from app.models.schemas import HealthResponse, FeedbackRequest
 
-logging.basicConfig(
-    level=logging.DEBUG if DEBUG else logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
-logger = logging.getLogger("chatbot")
+import os
+setup_logging(level=os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO"))
+logger = logging.getLogger(__name__)
+logger.info("Chatbot server başlatılıyor", extra={"debug": DEBUG})
 
 app = FastAPI(
     title="e-Arzuhal Chatbot Server",
@@ -63,12 +62,14 @@ async def request_middleware(request: Request, call_next):
     else:
         response = await call_next(request)
 
-    latency = (time.perf_counter() - start) * 1000
-    logger.info(
-        "[%s] %s %s status=%d latency=%.1fms",
-        request_id, request.method, request.url.path,
-        response.status_code, latency,
-    )
+    if request.url.path not in public:
+        logger.info("http_request", extra={
+            "request_id": request_id,
+            "method":     request.method,
+            "path":       request.url.path,
+            "status":     response.status_code,
+            "ms":         int((time.perf_counter() - start) * 1000),
+        })
     return response
 
 app.include_router(chat.router)
@@ -105,11 +106,12 @@ async def health_check():
 
 @app.post("/api/feedback", status_code=204, tags=["Feedback"])
 async def feedback(request: Request, body: FeedbackRequest):
-    rid = getattr(request.state, "request_id", "-")
-    logger.info(
-        "[%s] FEEDBACK rating=%d intent=%s msg=%.60s",
-        rid, body.rating, body.intent or "NONE", body.message,
-    )
+    logger.info("feedback", extra={
+        "request_id": getattr(request.state, "request_id", "-"),
+        "rating":     body.rating,
+        "intent":     body.intent or "NONE",
+        "msg_prefix": body.message[:60],
+    })
 
 
 if __name__ == "__main__":

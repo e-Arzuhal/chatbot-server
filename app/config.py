@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", 8003))
-DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+HOST    = os.getenv("HOST", "0.0.0.0")
+PORT    = int(os.getenv("PORT", 8003))
+DEBUG   = os.getenv("DEBUG", "true").lower() == "true"
 APP_ENV = os.getenv("APP_ENV", "development").lower()
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
 
 # LLM — lokal Ollama (Qwen2)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

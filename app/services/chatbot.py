@@ -2,7 +2,11 @@
 e-Arzuhal Chatbot Service
 Context-aware Gemini LLM entegrasyonu + FAQ fallback
 """
+import logging
+
 from app.config import GEMINI_API_KEY, LLM_MODEL, SYSTEM_PROMPT
+
+logger = logging.getLogger("chatbot")
 
 # Kural tabanli SSS: (anahtar_kelimeler, yanit, onerilen_sorular)
 FAQ = [
@@ -251,15 +255,13 @@ async def get_chat_response(message: str, history: list, intent: str = None,
     if GEMINI_API_KEY:
         try:
             from app.sanitizer import redact
-            import logging as _logging
-            _logger = _logging.getLogger("chatbot")
 
             clean_msg, found_msg = redact(message)
             clean_contract, found_ctx = redact(contract_context or "")
             clean_graphrag, found_rag = redact(graphrag_context or "")
             all_found = found_msg + found_ctx + found_rag
             if all_found:
-                _logger.warning("PII redacted before LLM: %s", all_found)
+                logger.warning("PII redacted before LLM: %s", all_found)
 
             system_override = None
             if intent and intent != "GENERAL_HELP":
@@ -276,7 +278,7 @@ async def get_chat_response(message: str, history: list, intent: str = None,
             suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
             return llm_response + LEGAL_DISCLAIMER, suggestions
         except Exception as e:
-            print(f"LLM hatasi: {e}")
+            logger.error("LLM hatası: %s", e, exc_info=True)
 
     # 3. Fallback
     return DEFAULT_RESPONSE, DEFAULT_SUGGESTIONS
