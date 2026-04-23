@@ -1,11 +1,16 @@
 """
 e-Arzuhal Chatbot Server - API Routes
 """
+import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from app.models.schemas import ChatRequest, ChatResponse
-from app.services.chatbot import get_chat_response
+from app.services.chatbot import (
+    get_chat_response, _iter_llm_stream, _find_faq_match,
+    _build_enriched_prompt, INTENT_SUGGESTIONS, DEFAULT_SUGGESTIONS, LEGAL_DISCLAIMER,
+)
 from app.limiter import limiter
 
 logger = logging.getLogger("chatbot")
@@ -41,3 +46,56 @@ async def chat(request: Request, body: ChatRequest):
     except Exception as e:
         logger.error("[%s] chat error: %s", rid, e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stream")
+@limiter.limit("5/minute;20/day")
+async def chat_stream(request: Request, body: ChatRequest):
+    """
+    LLM yanıtını Server-Sent Events ile chunk chunk döner.
+    POST /api/chat/stream
+
+    SSE formatı:
+      data: {"text": "..."}\n\n   — metin parçası
+      data: {"suggestions": [...], "done": true}\n\n  — son mesaj
+    """
+    from app.config import GEMINI_API_KEY
+
+    rid = getattr(request.state, "request_id", "-")
+    effective_message = body.sanitized_message or body.message
+    logger.debug("[%s] stream intent=%s msg=%.80s", rid, body.intent or "NONE", effective_message)
+
+    # FAQ eşleşmesi varsa tek chunk olarak gönder
+    if not body.intent or body.intent == "GENERAL_HELP":
+        faq_response, faq_suggestions = _find_faq_match(effective_message)
+        if faq_response:
+            async def _faq_stream():
+                yield f"data: {json.dumps({'text': faq_response}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'suggestions': faq_suggestions, 'done': True}, ensure_ascii=False)}\n\n"
+            return StreamingResponse(_faq_stream(), media_type="text/event-stream")
+
+    # LLM yoksa fallback
+    if not GEMINI_API_KEY:
+        from app.services.chatbot import DEFAULT_RESPONSE
+        async def _fallback():
+            yield f"data: {json.dumps({'text': DEFAULT_RESPONSE}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'suggestions': DEFAULT_SUGGESTIONS, 'done': True}, ensure_ascii=False)}\n\n"
+        return StreamingResponse(_fallback(), media_type="text/event-stream")
+
+    system_override = None
+    if body.intent and body.intent != "GENERAL_HELP":
+        system_override = _build_enriched_prompt(
+            body.intent, body.contract_context, body.graphrag_context
+        )
+    suggestions = INTENT_SUGGESTIONS.get(body.intent, DEFAULT_SUGGESTIONS)
+
+    def _generate():
+        try:
+            for chunk in _iter_llm_stream(effective_message, body.history, system_override):
+                yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'text': LEGAL_DISCLAIMER, 'suggestions': suggestions, 'done': True}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.error("[%s] stream error: %s", rid, e)
+            yield f"data: {json.dumps({'error': str(e), 'done': True}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(_generate(), media_type="text/event-stream")

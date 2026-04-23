@@ -206,6 +206,30 @@ def _call_llm(message: str, history: list, system_override: str = None) -> str:
     return response.text
 
 
+def _iter_llm_stream(message: str, history: list, system_override: str = None):
+    """Gemini streaming sync generator — her chunk'ı yield eder."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    contents = []
+    for h in history[-6:]:
+        role = "user" if h.role == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part(text=h.content)]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=message)]))
+
+    for chunk in client.models.generate_content_stream(
+        model=LLM_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_override or SYSTEM_PROMPT,
+        ),
+    ):
+        if chunk.text:
+            yield chunk.text
+
+
 async def get_chat_response(message: str, history: list, intent: str = None,
                             contract_context: str = None,
                             graphrag_context: str = None) -> tuple[str, list]:
