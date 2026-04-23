@@ -250,15 +250,28 @@ async def get_chat_response(message: str, history: list, intent: str = None,
     # 2. LLM ile context-aware yanıt
     if GEMINI_API_KEY:
         try:
+            from app.sanitizer import redact
+            import logging as _logging
+            _logger = _logging.getLogger("chatbot")
+
+            clean_msg, found_msg = redact(message)
+            clean_contract, found_ctx = redact(contract_context or "")
+            clean_graphrag, found_rag = redact(graphrag_context or "")
+            all_found = found_msg + found_ctx + found_rag
+            if all_found:
+                _logger.warning("PII redacted before LLM: %s", all_found)
+
             system_override = None
             if intent and intent != "GENERAL_HELP":
                 system_override = _build_enriched_prompt(
-                    intent, contract_context, graphrag_context
+                    intent,
+                    clean_contract or None,
+                    clean_graphrag or None,
                 )
 
             # Sync Gemini çağrısını thread pool'a taşı — event loop bloklanmaz
             llm_response = await asyncio.to_thread(
-                _call_llm, message, history, system_override
+                _call_llm, clean_msg, history, system_override
             )
             suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
             return llm_response + LEGAL_DISCLAIMER, suggestions

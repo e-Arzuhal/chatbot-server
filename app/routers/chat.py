@@ -11,6 +11,7 @@ from app.services.chatbot import (
     get_chat_response, _iter_llm_stream, _find_faq_match,
     _build_enriched_prompt, INTENT_SUGGESTIONS, DEFAULT_SUGGESTIONS, LEGAL_DISCLAIMER,
 )
+from app.sanitizer import redact
 from app.limiter import limiter
 
 logger = logging.getLogger("chatbot")
@@ -82,16 +83,23 @@ async def chat_stream(request: Request, body: ChatRequest):
             yield f"data: {json.dumps({'suggestions': DEFAULT_SUGGESTIONS, 'done': True}, ensure_ascii=False)}\n\n"
         return StreamingResponse(_fallback(), media_type="text/event-stream")
 
+    clean_msg, found_msg = redact(effective_message)
+    clean_contract, found_ctx = redact(body.contract_context or "")
+    clean_graphrag, found_rag = redact(body.graphrag_context or "")
+    all_found = found_msg + found_ctx + found_rag
+    if all_found:
+        logger.warning("[%s] stream PII redacted: %s", rid, all_found)
+
     system_override = None
     if body.intent and body.intent != "GENERAL_HELP":
         system_override = _build_enriched_prompt(
-            body.intent, body.contract_context, body.graphrag_context
+            body.intent, clean_contract or None, clean_graphrag or None
         )
     suggestions = INTENT_SUGGESTIONS.get(body.intent, DEFAULT_SUGGESTIONS)
 
     def _generate():
         try:
-            for chunk in _iter_llm_stream(effective_message, body.history, system_override):
+            for chunk in _iter_llm_stream(clean_msg, body.history, system_override):
                 yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'text': LEGAL_DISCLAIMER, 'suggestions': suggestions, 'done': True}, ensure_ascii=False)}\n\n"
         except Exception as e:
