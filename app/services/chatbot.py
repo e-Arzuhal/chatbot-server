@@ -151,15 +151,17 @@ def _call_llm(message: str, history: list, system_override: str = None) -> str:
     return response.text
 
 
-def get_chat_response(message: str, history: list, intent: str = None,
-                      contract_context: str = None,
-                      graphrag_context: str = None) -> tuple[str, list]:
+async def get_chat_response(message: str, history: list, intent: str = None,
+                            contract_context: str = None,
+                            graphrag_context: str = None) -> tuple[str, list]:
     """
     Ana chatbot logic:
     1. GENERAL_HELP veya enrichment yoksa → FAQ eşleşme dene
     2. Enrichment varsa → intent'e göre prompt oluştur ve LLM'e gönder
     3. Fallback: varsayılan yanıt
     """
+    import asyncio
+
     # 1. FAQ kontrolü (GENERAL_HELP veya enrichment yoksa)
     if not intent or intent == "GENERAL_HELP":
         faq_response, faq_suggestions = _find_faq_match(message)
@@ -169,14 +171,16 @@ def get_chat_response(message: str, history: list, intent: str = None,
     # 2. LLM ile context-aware yanıt
     if GEMINI_API_KEY:
         try:
-            # Enrichment varsa özel prompt oluştur
             system_override = None
             if intent and intent != "GENERAL_HELP":
                 system_override = _build_enriched_prompt(
                     intent, contract_context, graphrag_context
                 )
 
-            llm_response = _call_llm(message, history, system_override=system_override)
+            # Sync Gemini çağrısını thread pool'a taşı — event loop bloklanmaz
+            llm_response = await asyncio.to_thread(
+                _call_llm, message, history, system_override
+            )
             suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
             return llm_response, suggestions
         except Exception as e:
