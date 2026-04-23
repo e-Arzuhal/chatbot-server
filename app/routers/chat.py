@@ -1,10 +1,14 @@
 """
 e-Arzuhal Chatbot Server - API Routes
 """
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 from app.models.schemas import ChatRequest, ChatResponse
 from app.services.chatbot import get_chat_response
 from app.limiter import limiter
+
+logger = logging.getLogger("chatbot")
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -22,7 +26,9 @@ async def chat(request: Request, body: ChatRequest):
                     "graphrag_context": "..." }
     """
     try:
+        rid = getattr(request.state, "request_id", "-")
         effective_message = body.sanitized_message or body.message
+        logger.debug("[%s] intent=%s msg=%.80s", rid, body.intent or "NONE", effective_message)
 
         response, suggested_questions = await get_chat_response(
             message=effective_message,
@@ -33,4 +39,5 @@ async def chat(request: Request, body: ChatRequest):
         )
         return ChatResponse(response=response, suggested_questions=suggested_questions)
     except Exception as e:
+        logger.error("[%s] chat error: %s", rid, e)
         raise HTTPException(status_code=500, detail=str(e))
