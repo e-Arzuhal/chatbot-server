@@ -12,10 +12,10 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.config import HOST, PORT, DEBUG, LLM_ENABLED, ALLOWED_ORIGINS, INTERNAL_API_KEY
+from app.config import HOST, PORT, DEBUG, LLM_ENABLED, ALLOWED_ORIGINS, INTERNAL_API_KEY, GEMINI_API_KEY
 from app.limiter import limiter
 from app.routers import chat
-from app.models.schemas import HealthResponse
+from app.models.schemas import HealthResponse, FeedbackRequest
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
@@ -85,10 +85,30 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
+    llm_status = "disabled"
+    if LLM_ENABLED and GEMINI_API_KEY:
+        try:
+            from google import genai
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            from app.config import LLM_MODEL
+            client.models.get(model=LLM_MODEL)
+            llm_status = "ok"
+        except Exception:
+            llm_status = "error"
     return HealthResponse(
         status="healthy",
         version="0.1.0",
         llm_enabled=LLM_ENABLED,
+        llm_status=llm_status,
+    )
+
+
+@app.post("/api/feedback", status_code=204, tags=["Feedback"])
+async def feedback(request: Request, body: FeedbackRequest):
+    rid = getattr(request.state, "request_id", "-")
+    logger.info(
+        "[%s] FEEDBACK rating=%d intent=%s msg=%.60s",
+        rid, body.rating, body.intent or "NONE", body.message,
     )
 
 
