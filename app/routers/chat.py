@@ -45,8 +45,8 @@ async def chat(request: Request, body: ChatRequest):
         )
         return ChatResponse(response=response, suggested_questions=suggested_questions)
     except Exception as e:
-        logger.error("[%s] chat error: %s", rid, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("[%s] chat error", rid, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/stream")
@@ -103,7 +103,7 @@ async def chat_stream(request: Request, body: ChatRequest):
                 yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'text': LEGAL_DISCLAIMER, 'suggestions': suggestions, 'done': True}, ensure_ascii=False)}\n\n"
         except Exception as e:
-            logger.error("[%s] stream error: %s", rid, e)
-            yield f"data: {json.dumps({'error': str(e), 'done': True}, ensure_ascii=False)}\n\n"
+            logger.error("[%s] stream error", rid, exc_info=True)
+            yield f"data: {json.dumps({'error': 'Stream error', 'done': True}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
