@@ -8,7 +8,6 @@ Merkezi loglama yapılandırması — nlp-server mimarisine uyumlu.
 """
 import json
 import logging
-import re
 from typing import Any
 
 _BUILTIN_ATTRS: frozenset[str] = frozenset({
@@ -66,18 +65,9 @@ class PIIRedactFilter(logging.Filter):
     record.msg'yi yerinde değiştirir — tüm formatter'larla uyumludur.
     """
 
-    # sanitizer.py ile aynı pattern seti; import döngüsünü önlemek için burada tanımlandı
-    _PATTERNS: list[tuple[re.Pattern, str]] = [
-        (re.compile(r'\b[1-9]\d{10}\b'),                                                    "[TC_KİMLİK]"),
-        (re.compile(r'\bTR\d{24}\b', re.IGNORECASE),                                        "[IBAN]"),
-        (re.compile(r'(\+90[\s\-]?|0[\s\-]?)?5\d{2}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}\b'), "[TELEFON]"),
-        (re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b'),              "[E-POSTA]"),
-        (re.compile(r'\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b'),                    "[KART_NO]"),
-        (re.compile(r'\b\d{10}\b'),                                                          "[VERGİ_NO]"),
-    ]
-
     def _scrub(self, text: str) -> str:
-        for pattern, label in self._PATTERNS:
+        from app.sanitizer import _PATTERNS
+        for pattern, label in _PATTERNS:
             text = pattern.sub(label, text)
         return text
 
