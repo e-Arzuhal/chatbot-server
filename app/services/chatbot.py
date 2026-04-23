@@ -60,6 +60,10 @@ FAQ = [
     ),
 ]
 
+LEGAL_DISCLAIMER = (
+    "\n\n---\n*Bu yanıt yalnızca bilgilendirme amaçlıdır ve hukuki tavsiye niteliği taşımaz.*"
+)
+
 DEFAULT_RESPONSE = (
     "Bu konuda yardımcı olabileceğim bir bilgiye sahip değilim. "
     "Sözleşme oluşturma, PDF indirme veya onay süreci hakkında soru sorabilirsiniz."
@@ -182,7 +186,7 @@ async def get_chat_response(message: str, history: list, intent: str = None,
                 _call_llm, message, history, system_override
             )
             suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
-            return llm_response, suggestions
+            return llm_response + LEGAL_DISCLAIMER, suggestions
         except Exception as e:
             print(f"LLM hatasi: {e}")
 
