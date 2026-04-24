@@ -8,7 +8,7 @@ load_dotenv()
 
 HOST    = os.getenv("HOST", "0.0.0.0")
 PORT    = int(os.getenv("PORT", 8003))
-DEBUG   = os.getenv("DEBUG", "true").lower() == "true"
+DEBUG   = os.getenv("DEBUG", "false").lower() == "true"
 APP_ENV = os.getenv("APP_ENV", "development").lower()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
 
