@@ -1,6 +1,6 @@
 # e-Arzuhal – Chatbot Server
 
-Kullanıcı rehberi ve SSS chatbot servisi — FastAPI, kural tabanlı mod.
+Kullanıcı rehberi ve SSS chatbot servisi — FastAPI, FAQ + LLM destekli hibrit mod.
 
 ---
 
@@ -13,8 +13,10 @@ Bu servis kullanıcıların e-Arzuhal uygulaması hakkındaki sorularını yanı
 - Sıkça sorulan sorular (SSS)
 - Yönlendirme önerileri
 
-Chatbot varsayılan olarak **kural tabanlı** (pattern matching) modda çalışır.
-Google Gemini entegrasyonu kaldırılmıştır; ilerleyen dönemde yerel Qwen 2 entegrasyonu planlanmaktadır.
+Servis hibrit çalışır:
+- FAQ/pattern matching ile hızlı yanıt
+- `GEMINI_API_KEY` tanımlıysa LLM destekli yanıt
+- LLM erişilemezse güvenli fallback yanıtı
 
 ---
 
@@ -25,6 +27,7 @@ Google Gemini entegrasyonu kaldırılmıştır; ilerleyen dönemde yerel Qwen 2 
 | Language | Python 3.11+ |
 | Framework | FastAPI 0.115 |
 | Validation | Pydantic v2 |
+| LLM | Google Gemini (opsiyonel) |
 | Port | 8003 |
 
 ---
@@ -47,7 +50,12 @@ uvicorn app.main:app --reload --port 8003
 ### GET /health
 
 ```json
-{ "status": "healthy", "version": "0.1.0" }
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "llm_enabled": true,
+  "llm_status": "ok"
+}
 ```
 
 ### POST /api/chat
@@ -85,6 +93,9 @@ uvicorn app.main:app --reload --port 8003
 | `DEBUG` | `true` | Swagger UI + detaylı log |
 | `ALLOWED_ORIGINS` | `http://localhost:8080,http://localhost:3000` | CORS whitelist |
 | `INTERNAL_API_KEY` | _(boş)_ | Prod'da main-server ile aynı olmalı |
+| `LLM_ENABLED` | `true` | LLM akışını aç/kapat |
+| `GEMINI_API_KEY` | _(boş)_ | Tanımlıysa Gemini çağrıları etkinleşir |
+| `LLM_MODEL` | `gemini-2.5-flash` | Kullanılacak LLM modeli |
 
 ---
 
@@ -105,7 +116,7 @@ chatbot-server/
 │   ├── config.py
 │   ├── models/schemas.py
 │   ├── routers/chat.py
-│   └── services/chatbot.py    # Kural tabanlı yanıt üretici
+│   └── services/chatbot.py    # FAQ + LLM yanıt orkestrasyonu
 ├── requirements.txt
 └── .env.example
 ```
