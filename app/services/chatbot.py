@@ -69,7 +69,7 @@ LEGAL_DISCLAIMER = (
 )
 
 DEFAULT_RESPONSE = (
-    "Bu konuda yardımcı olabileceğim bir bilgiye sahip değilim. "
+    "Bu sorunun cevabı bende yok; uydurmamak için emin olmadığımı belirtmeliyim. "
     "Sözleşme oluşturma, PDF indirme veya onay süreci hakkında soru sorabilirsiniz."
 )
 DEFAULT_SUGGESTIONS = [
