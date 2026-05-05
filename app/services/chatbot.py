@@ -39,10 +39,10 @@ FAQ = [
         ["Sözleşme nasıl oluşturulur?", "Dilekçe oluşturabilir miyim?"],
     ),
     (
-        ["dilekce", "petition"],
+        ["dilekce sayfasi", "dilekce nasil olusturulur uygulamada", "dilekce menu"],
         "Dilekçe oluşturmak için sol menüden 'Dilekçeler' bölümüne gidin. "
         "Standart dilekçe şablonlarından seçim yapabilir veya kendi metninizi girebilirsiniz.",
-        ["Sözleşme nasıl oluşturulur?", "PDF nasıl indirilir?"],
+        ["Kira artışına itiraz dilekçesi nasıl yazılır?", "Sözleşme nasıl oluşturulur?", "PDF nasıl indirilir?"],
     ),
     (
         ["durum", "takip", "bekliyor", "onaylandi", "reddedildi"],
