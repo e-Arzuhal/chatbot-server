@@ -68,6 +68,33 @@ LEGAL_DISCLAIMER = (
     "\n\n---\n*Bu yanıt yalnızca bilgilendirme amaçlıdır ve hukuki tavsiye niteliği taşımaz.*"
 )
 
+# Gemini bazen SYSTEM_PROMPT'taki "disclaimer ekleme" kuralını yok sayıp kendi
+# kapanış uyarısını ekliyor. Sonra LEGAL_DISCLAIMER de eklendiğinde kullanıcı
+# aynı uyarıyı iki kere görüyor. Aşağıdaki regex, yanıtın sonundaki
+# disclaimer-benzeri cümleleri tespit edip kırpıyor (LEGAL_DISCLAIMER eklenmeden
+# önce). Eşleşmezse string olduğu gibi kalır.
+import re as _re
+_DISCLAIMER_TAIL_RE = _re.compile(
+    r"(?:\n+(?:[*_\-\s]*)?[^\n]*"
+    r"(?:bilgilendirme\s+ama[cç][il]?[il]?d[il]?r"
+    r"|hukuki\s+tavsiye"
+    r"|hukuk[il]?\s+tavsiye"
+    r"|avukat[a-zçğışöü]*\s+dan[il]?[şs]"
+    r"|profesyonel\s+yard[il]?m"
+    r")[^\n]*)+\s*$",
+    flags=_re.IGNORECASE | _re.UNICODE,
+)
+
+
+def _strip_trailing_disclaimer(text: str) -> str:
+    """LLM yanıtının sonundaki disclaimer-benzeri cümleleri (yatık/koyu/tire ile
+    ayrılmış olsa bile) çıkarır. Sistem LEGAL_DISCLAIMER'ı her durumda
+    ekleyeceği için bu çift gösterimi engeller."""
+    if not text:
+        return text
+    cleaned = _DISCLAIMER_TAIL_RE.sub("", text)
+    return cleaned.rstrip()
+
 DEFAULT_RESPONSE = (
     "Bu sorunun cevabı bende yok; uydurmamak için emin olmadığımı belirtmeliyim. "
     "Sözleşme oluşturma, PDF indirme veya onay süreci hakkında soru sorabilirsiniz."
@@ -290,7 +317,9 @@ async def get_chat_response(message: str, history: list, intent: str = None,
                 _call_llm, clean_msg, history, system_override
             )
             suggestions = INTENT_SUGGESTIONS.get(intent, DEFAULT_SUGGESTIONS)
-            return llm_response + LEGAL_DISCLAIMER, suggestions
+            # LLM kapanış disclaimer'ı eklediyse kırp — sonra TEK disclaimer ekle
+            cleaned_response = _strip_trailing_disclaimer(llm_response)
+            return cleaned_response + LEGAL_DISCLAIMER, suggestions
         except Exception as e:
             logger.error("LLM hatası: %s", e, exc_info=True)
 
