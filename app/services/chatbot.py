@@ -100,6 +100,11 @@ INTENT_SUGGESTIONS = {
         "Uygulamada nasıl yorumlanıyor?",
         "Ceza hükmü var mı?",
     ],
+    "CONTRACT_LIST_QUERY": [
+        "En son hangi sözleşmeyi oluşturdum?",
+        "Onay bekleyen sözleşmelerim hangileri?",
+        "Bir sözleşmemin maddelerini açıkla",
+    ],
 }
 
 
@@ -175,9 +180,18 @@ def _build_enriched_prompt(intent: str, contract_context: str = None,
         parts.append("Kullanıcı genel bir hukuki soru soruyor. İlgili kanun maddelerini referans vererek yanıtla.\n")
     elif intent == "LAW_REFERENCE":
         parts.append("Kullanıcı belirli kanun maddeleri (TBK/HMK vb.) hakkında bilgi istiyor.\n")
+    elif intent == "CONTRACT_LIST_QUERY":
+        parts.append(
+            "Kullanıcı kendi oluşturduğu/sahip olduğu TÜM sözleşmeler hakkında bilgi istiyor. "
+            "Aşağıda kullanıcının sözleşmelerinin özet listesi var; bu listeden referans vererek "
+            "(başlık, tip, durum, karşı taraf, tutar) yanıt ver. Listenin dışında bir sözleşme uydurma.\n"
+        )
 
     if contract_context:
-        parts.append(f"\nKullanıcının aktif sözleşmesi:\n{contract_context}\n")
+        if intent == "CONTRACT_LIST_QUERY":
+            parts.append(f"\n{contract_context}\n")
+        else:
+            parts.append(f"\nKullanıcının aktif sözleşmesi:\n{contract_context}\n")
 
     if graphrag_context:
         parts.append(f"\nBilgi Grafiği (GraphRAG) analiz sonucu:\n{graphrag_context}\n")
