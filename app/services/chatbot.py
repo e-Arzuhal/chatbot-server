@@ -4,7 +4,7 @@ Context-aware Gemini LLM entegrasyonu + FAQ fallback
 """
 import logging
 
-from app.config import GEMINI_API_KEY, LLM_MODEL, SYSTEM_PROMPT
+from app.config import GEMINI_API_KEY, GEMINI_API_KEY_FALLBACK, LLM_MODEL, SYSTEM_PROMPT
 
 logger = logging.getLogger("chatbot")
 
@@ -227,16 +227,26 @@ def _build_enriched_prompt(intent: str, contract_context: str = None,
     return "".join(parts)
 
 
-def _call_llm(message: str, history: list, system_override: str = None) -> str:
-    """Gemini API'ye istek at"""
+def _is_quality_text(text: str) -> bool:
+    """LLM cevabı boş, çok kısa veya hata kalıbı mı diye kontrol — yetersizse
+    yedek API anahtarı denenir."""
+    if not text:
+        return False
+    stripped = text.strip()
+    if len(stripped) < 10:
+        return False
+    lowered = stripped.lower()
+    bad_patterns = ("api key not valid", "quota exceeded", "service unavailable")
+    return not any(p in lowered for p in bad_patterns)
+
+
+def _call_with_key(api_key: str, message: str, history: list, system_override: str = None) -> str:
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
-
-    # Gemini history formatı: [{role, parts}]
+    client = genai.Client(api_key=api_key)
     chat_history = []
-    for h in history[-6:]:  # Son 6 mesaj (3 tur)
+    for h in history[-6:]:
         role = "user" if h.role == "user" else "model"
         chat_history.append(types.Content(role=role, parts=[types.Part(text=h.content)]))
 
@@ -249,6 +259,32 @@ def _call_llm(message: str, history: list, system_override: str = None) -> str:
     )
     response = chat.send_message(message)
     return response.text
+
+
+def _call_llm(message: str, history: list, system_override: str = None) -> str:
+    """Gemini API'ye istek at; birincil anahtar 503/quota/boş yanıt verirse
+    GEMINI_API_KEY_FALLBACK ile tekrar dene."""
+    # 1) Birincil anahtar
+    try:
+        text = _call_with_key(GEMINI_API_KEY, message, history, system_override)
+        if _is_quality_text(text):
+            return text
+        logger.warning("Birincil Gemini anahtarı boş/yetersiz yanıt verdi; fallback denenecek.")
+    except Exception as e:
+        logger.warning("Birincil Gemini anahtarı hata verdi (%s); fallback denenecek.", e)
+        text = None
+
+    # 2) Yedek anahtar tanımlıysa onu dene
+    if GEMINI_API_KEY_FALLBACK:
+        try:
+            return _call_with_key(GEMINI_API_KEY_FALLBACK, message, history, system_override)
+        except Exception as e:
+            logger.error("Yedek Gemini anahtarı da başarısız: %s", e)
+
+    # 3) Birincilin verdiği (kalitesizse de) cevabı son çare olarak dön
+    if text:
+        return text
+    raise RuntimeError("Tüm Gemini anahtarları başarısız oldu.")
 
 
 def _iter_llm_stream(message: str, history: list, system_override: str = None):

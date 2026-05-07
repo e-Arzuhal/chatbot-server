@@ -17,6 +17,9 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen2:1.5b")
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Yedek anahtar — birincil 503/quota döner ya da boş yanıt verirse otomatik
+# olarak buna düşülür. Boş bırakılabilir.
+GEMINI_API_KEY_FALLBACK = os.getenv("GEMINI_API_KEY_FALLBACK", "")
 
 # Security — yalnızca main-server erişmeli (frontend main-server üzerinden orkestrasyon ile gelir)
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8080").split(",")]
