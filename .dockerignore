@@ -1,0 +1,40 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Git
+.git/
+.gitignore
+
+# Local development
+.env
+.env.local
+.env.*
+!.env.example
+
+# Docs
+*.md
+
+# Misc
+*.pkl
+*.joblib
+node_modules/
+package-lock.json
